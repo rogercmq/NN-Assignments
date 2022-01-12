@@ -132,3 +132,4 @@ dmypy.json
 /*/pred*/
 /P2/train.csv/
 /P2/test.csv/
+/P1/raw_data/*

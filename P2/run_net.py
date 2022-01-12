@@ -71,7 +71,7 @@ LR = 0.0001
 BATCH_SIZE = 64
 ITERATION = 20000
 CKPT_ITER = 2000
-MODEL_TYPE = 'LSTM' # GRU | LSTM
+MODEL_TYPE = 'GRU' # GRU | LSTM | LINEAR
 
 
 if __name__ == '__main__':

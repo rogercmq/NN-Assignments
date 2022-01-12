@@ -152,6 +152,7 @@ class Trainer():
         # 生成 numpy 测试标签
         self.test_label = test_label
 
+
 if __name__ == '__main__':
     SEQ_LENGTH = 56
     NPY_PATH = f"./data{SEQ_LENGTH}/"
