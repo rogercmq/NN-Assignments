@@ -25,7 +25,7 @@ def evaluate_net(model:MnistMLP, dataloader):
 
 if __name__ == '__main__':
     ITERATIONS = 10000
-    LR = 0.001
+    LR = 1e-5
     LR_STRATEGY = 'cosine'
     ACTIVATION_TYPE = 'relu'
     INIT_METHOD = 'random'
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     random.shuffle(trainset)
     random.shuffle(testset)
     batch_size = len(trainset) * EPOCHES // ITERATIONS
-    mlp = MnistMLP(size=[INPUT_SHAPE*INPUT_SHAPE, HIDDEN_SIZE, HIDDEN_SIZE, NUM_CLASSES], 
+    mlp = MnistMLP(size=[INPUT_SHAPE*INPUT_SHAPE, HIDDEN_SIZE, NUM_CLASSES], 
                    act_type=ACTIVATION_TYPE, 
                    init_type=INIT_METHOD)
     print(mlp)
@@ -59,6 +59,4 @@ if __name__ == '__main__':
                     total_iters=ITERATIONS)
     print("Start testing...")
     accuracy = evaluate_net(model=mlp, dataloader=testset)
-    print(mlp.weights[1])
-    print(mlp.weights[-1])
     print(accuracy)

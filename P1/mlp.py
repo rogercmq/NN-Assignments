@@ -26,17 +26,18 @@ class MnistMLP():
         self.weights = None
         self.biases = None
         self.init_params(init_type)
+        self.debug_log = 0
 
 
     def __repr__(self):
         return f'weight matrix shape: {[w.shape for w in self.weights]}\n' \
                f'bias matrix shape: {[b.shape for b in self.biases]}'
-    
 
-    def init_params(self, init_type): # param initialization
-        if init_type == 'random':
-            self.weights = [np.random.randn(y,x) for x,y in zip(self.depths[:-1], self.depths[1:])]
-            self.biases = [np.random.randn(y,1) for y in self.depths[1:]]
+
+    def init_params(self, init_type): # param initialization # 784 512 10
+        if init_type == 'random': # standard gaussian
+            self.weights = [np.random.normal(0, np.sqrt(2/y), (y, x)) for x,y in zip(self.depths[:-1], self.depths[1:])]
+            self.biases = [np.random.normal(0, np.sqrt(2/y), (y, 1)) for y in self.depths[1:]]
         else:
             raise NotImplementedError
 
@@ -53,8 +54,7 @@ class MnistMLP():
         if y is None: # forward only, for evaluating
             for i in range(len(self.weights)):
                 x = np.dot(self.weights[i], x) + self.biases[i]
-                if i != len(self.weights) - 1:
-                    x = self.activation(x)
+                x = self.activation(x)
             return x
         else: # forward & backward, for training
             nabla_w = [np.zeros(w.shape) for w in self.weights]
@@ -68,7 +68,6 @@ class MnistMLP():
                 activation = self.activation(z)
                 activations.append(activation)
             loss = self.loss(activations[-1], y, return_grad=True)
-            print(sum(loss), loss.shape)
             delta = loss * self.activation(z_vector[-1], bp=True)
             nabla_w[-1] = np.dot(delta, activations[-2].transpose())
             nabla_b[-1] = delta
@@ -78,6 +77,15 @@ class MnistMLP():
                 delta = np.dot(self.weights[-layer+1].transpose(), delta) * Rp
                 nabla_w[-layer] = np.dot(delta, activations[-layer-1].transpose())
                 nabla_b[-layer] = delta
+            if self.debug_log < 1:
+                # print(loss.squeeze(-1))
+                # print(delta.squeeze(-1))
+                #for item_ in nabla_w:
+                #    print(item_.shape, item_)
+                #print("!!")
+                for item_ in activations:
+                    print(item_.shape)
+                self.debug_log += 1
             return (nabla_w, nabla_b)
 
 

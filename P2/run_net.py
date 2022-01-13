@@ -10,8 +10,8 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 from models import LinearPredictor, LSTMPredictor, GRUPredictor
-from dataloader import Trainer
-
+from dataloader import Trainer, load_raw
+from metric import smape
 
 def train_net(model, dataloader, optimizer, criterion, total_iter=10000, log_iter=1000, ckpt_iter=1000, model_name='model', model_path='./ckpts'):
     cur_iter = 0
@@ -34,7 +34,7 @@ def train_net(model, dataloader, optimizer, criterion, total_iter=10000, log_ite
 
 
 @torch.no_grad()
-def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'):
+def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv', normer=None):
     results = None
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -45,6 +45,8 @@ def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'
         total_loss += criterion(outputs, batch_y)
         total_iters += 1
         pred = outputs.detach().numpy()
+        if normer is not None:
+            pred = normer.inverse_transform(pred)
         if results is None:
             results = pred
         else:
@@ -63,6 +65,20 @@ def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'
     return avg_loss
 
 
+def cal_smape(pred_filename, mode, gt_path):
+    preds = load_raw(pred_filename)
+    assert mode == 'train' or mode == 'test'
+    if mode == 'train':
+        labels = np.load(os.path.join(gt_path, 'train_y.npy'))
+    else:
+        labels = load_raw('test.csv')
+    assert preds.shape == labels.shape, f'{preds.shape} | {labels.shape}'
+    avg_smape = 0.
+    for i in range(len(preds)):
+        avg_smape += smape(preds[i], labels[i])
+    return avg_smape / len(preds)
+
+
 SEQ_LENGTH = 56
 INPUT_SIZE = 1
 HIDDEN_SIZE = 32
@@ -70,7 +86,7 @@ NUM_LAYERS = 1
 LR = 0.0001
 BATCH_SIZE = 64
 ITERATION = 20000
-CKPT_ITER = 2000
+CKPT_ITER = 5000
 MODEL_TYPE = 'GRU' # GRU | LSTM | LINEAR
 
 
@@ -103,7 +119,7 @@ if __name__ == '__main__':
     if not os.path.exists(f'pred{SEQ_LENGTH}/{MODEL_TYPE}'):
         os.mkdir(f'pred{SEQ_LENGTH}/{MODEL_TYPE}')        
     with open(os.path.join(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/summary.txt'), 'w') as f:
-        f.write(f'TYPE: {MODEL_TYPE} TRAIN LOSS | VAL LOSS | TEST LOSS\n')
+        f.write(f'TYPE: {MODEL_TYPE} TRAIN LOSS | VAL LOSS | TEST LOSS | TRAIN SMAPE | TEST SMAPE \n')
         for i in tqdm(range(0, ITERATION+1, CKPT_ITER)):
             if i == 0:
                 continue
@@ -111,7 +127,10 @@ if __name__ == '__main__':
             assert os.path.exists(model_path), model_path
             model.load_state_dict(torch.load(model_path))
             # 只有 shuffle=False 时才可以评估训练集
-            loss_train = evaluate_net(model, train_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'train_{MODEL_TYPE}_Iter{i}.csv') 
-            loss_val = evaluate_net(model, val_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'val_{MODEL_TYPE}_Iter{i}.csv')
-            loss_test = evaluate_net(model, test_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'test_{MODEL_TYPE}_Iter{i}.csv')
-            f.write(f'ITER {i}: %.5f | %.5f | %.5f\n' % (loss_train, loss_val, loss_test))
+            normer = trainer.normer
+            loss_train = evaluate_net(model, train_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'train_{MODEL_TYPE}_Iter{i}.csv', normer=normer) 
+            loss_val = evaluate_net(model, val_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'val_{MODEL_TYPE}_Iter{i}.csv', normer=normer)
+            loss_test = evaluate_net(model, test_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'test_{MODEL_TYPE}_Iter{i}.csv', normer=normer)
+            smape_train = cal_smape(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/train_{MODEL_TYPE}_Iter{i}.csv', 'train', gt_path=f'data{SEQ_LENGTH}')
+            smape_test = cal_smape(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/test_{MODEL_TYPE}_Iter{i}.csv', 'test', gt_path=f'data{SEQ_LENGTH}')
+            f.write(f'ITER {i}: %.5f | %.5f | %.5f | %.5f | %.5f\n' % (loss_train, loss_val, loss_test, smape_train, smape_test))
