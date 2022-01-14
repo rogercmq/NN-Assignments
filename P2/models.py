@@ -39,7 +39,7 @@ class GRUPredictor(nn.Module):
 
     def forward(self, x):
         x = x.unsqueeze(-1)
-        h_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))    
+        h_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size)).cuda() 
         _, h_out  = self.gru(x, h_0)
         h_out = h_out.view(-1, self.hidden_size)
         out = F.relu(self.fc1(h_out))
@@ -52,14 +52,60 @@ class LSTMPredictor(nn.Module):
         super(LSTMPredictor, self).__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.2)
         self.fc = nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
         x = x.unsqueeze(-1)
-        h_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
-        c_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
+        h_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size)).cuda()
+        c_0 = Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size)).cuda()
         _, (h_out, _) = self.lstm(x, (h_0, c_0))
         h_out = h_out.view(-1, self.hidden_size)
         out = self.fc(h_out)
         return out
+
+
+class Encoder(nn.Module):
+    def __init__(self, hid_dim=64, n_layers=2, dropout=0.2, input_dim=1):
+        super().__init__()
+        self.hid_dim = hid_dim
+        self.n_layers = n_layers
+        self.network = nn.LSTM(input_dim, hid_dim, n_layers, dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
+        
+    def forward(self, x):
+        outputs, (hidden, cell) = self.network(x)        
+        return hidden, cell
+
+
+class Decoder(nn.Module):
+    def __init__(self, hid_dim=64, n_layers=2, dropout=0.2, output_dim=1):
+        super().__init__()
+        self.output_dim = output_dim
+        self.hid_dim = hid_dim
+        self.n_layers = n_layers
+        self.network = nn.LSTM(output_dim, hid_dim, n_layers, dropout=dropout)
+        self.fc_out = nn.Linear(hid_dim, output_dim)
+        self.dropout = nn.Dropout(dropout)
+        
+    def forward(self, input, hidden, cell):
+        output, (hidden, cell) = self.network(input, (hidden, cell))
+        prediction = self.fc_out(output.squeeze(0))
+        return prediction, hidden, cell
+
+
+class Seq2Seq(nn.Module):
+    def __init__(self,):
+        super().__init__()
+        self.encoder = Encoder()
+        self.decoder = Decoder()
+        assert self.encoder.hid_dim == self.decoder.hid_dim, "Hidden dimensions of encoder and decoder must be equal!"
+        assert self.encoder.n_layers == self.decoder.n_layers, "Encoder and decoder must have equal number of layers!"
+        
+    def forward(self, x):
+        x = x.unsqueeze(-1)
+        hidden, cell = self.encoder(x)
+        x_ = torch.zeros_like(x)
+        output, hidden, cell = self.decoder(x_, hidden, cell)
+        output = output.squeeze(-1)
+        return output

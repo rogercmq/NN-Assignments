@@ -9,7 +9,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 
-from models import LinearPredictor, LSTMPredictor, GRUPredictor
+from models import LinearPredictor, LSTMPredictor, GRUPredictor, Seq2Seq
 from dataloader import Trainer, load_raw
 from metric import smape
 
@@ -17,6 +17,7 @@ def train_net(model, dataloader, optimizer, criterion, total_iter=10000, log_ite
     cur_iter = 0
     for _ in range(10000):
         for _, (batch_x, batch_y) in enumerate (dataloader): 
+            batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
             outputs = model(batch_x)
             optimizer.zero_grad()   
             loss = criterion(outputs, batch_y)
@@ -41,10 +42,11 @@ def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'
     total_iters = 0
     total_loss = 0
     for _, (batch_x, batch_y) in enumerate (dataloader): 
+        batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
         outputs = model(batch_x)
         total_loss += criterion(outputs, batch_y)
         total_iters += 1
-        pred = outputs.detach().numpy()
+        pred = outputs.detach().cpu().numpy()
         if normer is not None:
             pred = normer.inverse_transform(pred)
         if results is None:
@@ -67,9 +69,10 @@ def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'
 
 def cal_smape(pred_filename, mode, gt_path):
     preds = load_raw(pred_filename)
-    assert mode == 'train' or mode == 'test'
     if mode == 'train':
         labels = np.load(os.path.join(gt_path, 'train_y.npy'))
+    elif mode == 'val':
+        labels = np.load(os.path.join(gt_path, 'val_y.npy'))
     else:
         labels = load_raw('test.csv')
     assert preds.shape == labels.shape, f'{preds.shape} | {labels.shape}'
@@ -79,18 +82,25 @@ def cal_smape(pred_filename, mode, gt_path):
     return avg_smape / len(preds)
 
 
-SEQ_LENGTH = 56
-INPUT_SIZE = 1
-HIDDEN_SIZE = 32
-NUM_LAYERS = 1
-LR = 0.0001
-BATCH_SIZE = 64
-ITERATION = 20000
-CKPT_ITER = 5000
-MODEL_TYPE = 'GRU' # GRU | LSTM | LINEAR
-
-
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seq_length', type=int, default=56)
+    parser.add_argument('--hidden_size', type=int, default=32)
+    parser.add_argument('--model_type', type=str, default='LINEAR')
+    args = parser.parse_args()
+    
+    SEQ_LENGTH = args.seq_length
+    HIDDEN_SIZE = args.hidden_size
+    MODEL_TYPE = args.model_type # GRU | LSTM | LINEAR | SEQ2SEQ
+    
+    INPUT_SIZE = 1
+    NUM_LAYERS = 1
+    LR = 0.001
+    BATCH_SIZE = 64
+    ITERATION = 120000
+    CKPT_ITER = 20000
+    
     trainer = Trainer(seq_length=SEQ_LENGTH)
     if os.path.exists(f'data{SEQ_LENGTH}'):
         trainer.collect_data(load_npy=True, load_npy_path=f'data{SEQ_LENGTH}')
@@ -99,13 +109,16 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(dataset=trainer.train_dataset, batch_size=BATCH_SIZE, shuffle=False)
     val_loader = torch.utils.data.DataLoader(dataset=trainer.val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = torch.utils.data.DataLoader(dataset=trainer.test_dataset, batch_size=BATCH_SIZE, shuffle=False)
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss() # MSELoss | L1Loss
     if MODEL_TYPE == 'LINEAR':
         model = LinearPredictor(seq_length=SEQ_LENGTH, hidden_size=HIDDEN_SIZE)
     elif MODEL_TYPE == 'GRU':
         model = GRUPredictor(seq_length=SEQ_LENGTH, num_layers=NUM_LAYERS, hidden_size=HIDDEN_SIZE)
     elif MODEL_TYPE == 'LSTM':
         model = LSTMPredictor(seq_length=SEQ_LENGTH, num_layers=NUM_LAYERS, hidden_size=HIDDEN_SIZE)
+    elif MODEL_TYPE == 'SEQ2SEQ':
+        model = Seq2Seq()
+    model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     print("Start Training...")
     if not os.path.exists(f'ckpts{SEQ_LENGTH}'):
@@ -119,7 +132,7 @@ if __name__ == '__main__':
     if not os.path.exists(f'pred{SEQ_LENGTH}/{MODEL_TYPE}'):
         os.mkdir(f'pred{SEQ_LENGTH}/{MODEL_TYPE}')        
     with open(os.path.join(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/summary.txt'), 'w') as f:
-        f.write(f'TYPE: {MODEL_TYPE} TRAIN LOSS | VAL LOSS | TEST LOSS | TRAIN SMAPE | TEST SMAPE \n')
+        f.write(f'TYPE: {MODEL_TYPE} TRAIN LOSS | VAL LOSS | TEST LOSS | TRAIN SMAPE | VAL SMAPE | TEST SMAPE \n')
         for i in tqdm(range(0, ITERATION+1, CKPT_ITER)):
             if i == 0:
                 continue
@@ -132,5 +145,6 @@ if __name__ == '__main__':
             loss_val = evaluate_net(model, val_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'val_{MODEL_TYPE}_Iter{i}.csv', normer=normer)
             loss_test = evaluate_net(model, test_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'test_{MODEL_TYPE}_Iter{i}.csv', normer=normer)
             smape_train = cal_smape(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/train_{MODEL_TYPE}_Iter{i}.csv', 'train', gt_path=f'data{SEQ_LENGTH}')
+            smape_val = cal_smape(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/val_{MODEL_TYPE}_Iter{i}.csv', 'val', gt_path=f'data{SEQ_LENGTH}')
             smape_test = cal_smape(f'pred{SEQ_LENGTH}/{MODEL_TYPE}/test_{MODEL_TYPE}_Iter{i}.csv', 'test', gt_path=f'data{SEQ_LENGTH}')
-            f.write(f'ITER {i}: %.5f | %.5f | %.5f | %.5f | %.5f\n' % (loss_train, loss_val, loss_test, smape_train, smape_test))
+            f.write(f'ITER {i}: %.5f | %.5f | %.5f | %.5f | %.5f | %.5f\n' % (loss_train, loss_val, loss_test, smape_train, smape_val, smape_test))
