@@ -48,7 +48,9 @@ def evaluate_net(model, dataloader, criterion, save_path, save_name='result.csv'
         total_iters += 1
         pred = outputs.detach().cpu().numpy()
         if normer is not None:
-            pred = normer.inverse_transform(pred)
+            x_ = batch_x.detach().cpu().numpy()
+            xy_ = normer.inverse_transform(np.hstack((x_, pred)))
+            pred = xy_[:, -56:]
         if results is None:
             results = pred
         else:

@@ -34,18 +34,14 @@ def load_raw(filename='train.csv'):         # 读取csv文件，返回npy数组
 
 
 def normalization(train_data, train_label, val_data, val_label, test_data, test_label):  # 对数据MinMaxNorm预处理
-    x_train_normer = MinMaxScaler()
-    y_train_normer = MinMaxScaler()
-    x_val_normer = MinMaxScaler()
-    y_val_normer = MinMaxScaler()
-    x_test_normer = MinMaxScaler() 
-    train_data = x_train_normer.fit_transform(train_data)
-    val_data = x_val_normer.fit_transform(val_data)
-    test_data = x_test_normer.fit_transform(test_data)
-    train_label = y_train_normer.fit_transform(train_label)
-    test_label = y_val_normer.fit_transform(test_label)
-    val_label = y_val_normer.fit_transform(val_label)
-    return train_data, train_label, val_data, val_label, test_data, test_label, y_val_normer
+    train_normer = MinMaxScaler()
+    val_normer = MinMaxScaler()
+    test_normer = MinMaxScaler()
+    input_length = train_data[0].shape[-1]
+    train_data = train_normer.fit_transform(np.hstack((train_data, train_label)))
+    val_data = val_normer.fit_transform(np.hstack((val_data, val_label)))
+    test_data = test_normer.fit_transform(np.hstack((test_data, test_label)))
+    return train_data[:,:input_length], train_data[:,input_length:], val_data[:,:input_length], val_data[:,input_length:], test_data[:,:input_length], test_data[:,input_length:], test_normer
 
 
 # def get_label(x, seq_length, label_length=56):        # 对csv数据文件滑动窗口划分输入数据和标签
@@ -174,8 +170,9 @@ class Trainer():
             except AssertionError:
                 raise ValueError('npy shape is not consistent with self.seq_length.')        
         # 正则化
-        print(f"Trainset Shape: {train_data.shape}; Valset Shape: {val_data.shape}; Testset Shape: {test_data.shape}")         
+        print(f"Trainset Scale: {train_data.shape}; Valset Scale: {val_data.shape}; Testset Scale: {test_data.shape}")         
         train_data, train_label, val_data, val_label, test_data, test_label, normer = normalization(train_data, train_label, val_data, val_label, test_data, test_label)
+        # print(f"Trainset Shape: {train_data.shape} {train_label.shape}; Valset Shape: {val_data.shape} {val_label.shape}; Testset Shape: {test_data.shape} {test_label.shape}")  
         self.normer = normer
         # 生成 Dataset & Dataloader
         self.train_data = Variable(torch.Tensor(train_data))
