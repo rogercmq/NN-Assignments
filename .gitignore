@@ -133,3 +133,6 @@ dmypy.json
 /P2/train.csv/
 /P2/test.csv/
 /P1/raw_data/*
+/P1/archived/*
+/P1/output/*
+/P1/output/*

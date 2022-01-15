@@ -98,8 +98,8 @@ if __name__ == '__main__':
     NUM_LAYERS = 1
     LR = 0.001
     BATCH_SIZE = 64
-    ITERATION = 120000
-    CKPT_ITER = 20000
+    ITERATION = 80000
+    CKPT_ITER = 10000
     
     trainer = Trainer(seq_length=SEQ_LENGTH)
     if os.path.exists(f'data{SEQ_LENGTH}'):

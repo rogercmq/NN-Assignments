@@ -1,14 +1,14 @@
 # Source: https://blog.csdn.net/u010874976/article/details/78571788
-
+from PIL import Image
 import numpy as np
 import gzip
+import random
 
 # Params for MNIST
 IMAGE_SIZE = 28
 NUM_CHANNELS = 1
 PIXEL_DEPTH = 255
 NUM_LABELS = 10
-
 
 def extract_data(filename, num_images):
     """ Extract the images into a 4D tensor [image index, y, x, channels]. Values are rescaled from [0, 255] down to [-0.5, 0.5].
@@ -24,7 +24,6 @@ def extract_data(filename, num_images):
 
 
 def extract_labels(filename, num_images):
-    """Extract the labels into a vector of int64 label IDs."""
     with gzip.open(filename) as bytestream:
         bytestream.read(8)
         buf = bytestream.read(1 * num_images)
@@ -41,12 +40,8 @@ def get_data():
     test_labels = extract_labels('raw_data/t10k-labels-idx1-ubyte.gz', 10000)
     train_data = extract_data('raw_data/train-images-idx3-ubyte.gz', 60000)
     train_labels = extract_labels('raw_data/train-labels-idx1-ubyte.gz', 60000)
-    return list(zip(train_data, train_labels)), list(zip(test_data, test_labels))
+    train_set = list(zip(train_data, train_labels))
+    test_set = list(zip(test_data, test_labels))
+    random.shuffle(train_set)
+    return train_set, test_set
 
-
-if __name__ == '__main__':
-    test_data = extract_data('raw_data/t10k-images-idx3-ubyte.gz', 10000)
-    test_labels = extract_labels('raw_data/t10k-labels-idx1-ubyte.gz', 10000)
-    train_data = extract_data('raw_data/train-images-idx3-ubyte.gz', 60000)
-    train_labels = extract_labels('raw_data/train-labels-idx1-ubyte.gz', 60000)
-    print(train_data.shape, train_labels.shape, test_data.shape, test_labels.shape)
