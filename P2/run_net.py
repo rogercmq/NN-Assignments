@@ -86,7 +86,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--seq_length', type=int, default=56)
-    parser.add_argument('--hidden_size', type=int, default=32)
+    parser.add_argument('--hidden_size', type=int, default=128)
     parser.add_argument('--model_type', type=str, default='LINEAR')
     args = parser.parse_args()
     
@@ -96,10 +96,11 @@ if __name__ == '__main__':
     
     INPUT_SIZE = 1
     NUM_LAYERS = 1
-    LR = 0.001
+    LR = 0.0001
     BATCH_SIZE = 64
-    ITERATION = 80000
-    CKPT_ITER = 10000
+    ITERATION = 10000
+    CKPT_ITER = 1000
+    LOG_ITER = 100  # 1 epoch = 1000 iters
     
     trainer = Trainer(seq_length=SEQ_LENGTH)
     if os.path.exists(f'data{SEQ_LENGTH}'):
@@ -125,7 +126,9 @@ if __name__ == '__main__':
         os.mkdir(f'ckpts{SEQ_LENGTH}')
     if not os.path.exists(f'ckpts{SEQ_LENGTH}/{MODEL_TYPE}'):
         os.mkdir(f'ckpts{SEQ_LENGTH}/{MODEL_TYPE}')    
-    train_net(model, train_loader, optimizer, criterion, model_name=MODEL_TYPE, total_iter=ITERATION, ckpt_iter=CKPT_ITER, model_path=f'ckpts{SEQ_LENGTH}/{MODEL_TYPE}')
+    train_net(model, train_loader, optimizer, criterion, 
+              model_name=MODEL_TYPE, total_iter=ITERATION, ckpt_iter=CKPT_ITER, log_iter=LOG_ITER, 
+              model_path=f'ckpts{SEQ_LENGTH}/{MODEL_TYPE}')
     print("Start Evaluating...")
     if not os.path.exists(f'pred{SEQ_LENGTH}'):
         os.mkdir(f'pred{SEQ_LENGTH}')
@@ -139,7 +142,6 @@ if __name__ == '__main__':
             model_path = os.path.join(f'ckpts{SEQ_LENGTH}/{MODEL_TYPE}/', f'{MODEL_TYPE}_iter{i}.pt')
             assert os.path.exists(model_path), model_path
             model.load_state_dict(torch.load(model_path))
-            # 只有 shuffle=False 时才可以评估训练集
             normer = trainer.normer
             loss_train = evaluate_net(model, train_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'train_{MODEL_TYPE}_Iter{i}.csv', normer=normer) 
             loss_val = evaluate_net(model, val_loader, criterion, save_path=f'pred{SEQ_LENGTH}/{MODEL_TYPE}/', save_name=f'val_{MODEL_TYPE}_Iter{i}.csv', normer=normer)

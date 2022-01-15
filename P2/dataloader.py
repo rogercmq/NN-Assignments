@@ -34,56 +34,92 @@ def load_raw(filename='train.csv'):         # 读取csv文件，返回npy数组
 
 
 def normalization(train_data, train_label, val_data, val_label, test_data, test_label):  # 对数据MinMaxNorm预处理
-    normer = MinMaxScaler()
-    train_data = normer.fit_transform(train_data)
-    val_data = normer.fit_transform(val_data)
-    test_data = normer.fit_transform(test_data)
-    train_label = normer.fit_transform(train_label)
-    val_label = normer.fit_transform(val_label)
-    test_label = normer.fit_transform(test_label)
-    return train_data, train_label, val_data, val_label, test_data, test_label, normer
+    x_train_normer = MinMaxScaler()
+    y_train_normer = MinMaxScaler()
+    x_val_normer = MinMaxScaler()
+    y_val_normer = MinMaxScaler()
+    x_test_normer = MinMaxScaler() 
+    train_data = x_train_normer.fit_transform(train_data)
+    val_data = x_val_normer.fit_transform(val_data)
+    test_data = x_test_normer.fit_transform(test_data)
+    train_label = y_train_normer.fit_transform(train_label)
+    test_label = y_val_normer.fit_transform(test_label)
+    val_label = y_val_normer.fit_transform(val_label)
+    return train_data, train_label, val_data, val_label, test_data, test_label, y_val_normer
 
 
-def get_label(x, seq_length, label_length=56):        # 对csv数据文件滑动窗口划分输入数据和标签
-    """
-        x: np.array('train.csv'), 111x735
-    """
-    assert x.shape[0] == 2 or x.shape[0] == 111, x.shape
-    assert x.shape[1] == 735, x.shape
-    # 滑动窗口获取数据和标签
-    data_np = x[:, :seq_length]
-    label_np =  x[:, seq_length:seq_length+label_length]
-    for idx in range(x.shape[1] - seq_length - label_length):
-        # print(f"{data_np.shape}...")
-        data_np = np.vstack((data_np, x[:, idx:idx+seq_length]))
-        label_np = np.vstack((label_np, x[:, idx+seq_length:idx+seq_length+label_length]))
-    testdata_np = x[:, -seq_length:]
-    return data_np, label_np, testdata_np
+# def get_label(x, seq_length, label_length=56):        # 对csv数据文件滑动窗口划分输入数据和标签
+#     """
+#         x: np.array('train.csv'), 111x735
+#     """
+#     assert x.shape[0] == 2 or x.shape[0] == 111, x.shape
+#     assert x.shape[1] == 735, x.shape
+#     # 滑动窗口获取数据和标签
+#     data_np = x[:, :seq_length]
+#     label_np =  x[:, seq_length:seq_length+label_length]
+#     for idx in range(x.shape[1] - seq_length - label_length):
+#         # print(f"{data_np.shape}...")
+#         data_np = np.vstack((data_np, x[:, idx:idx+seq_length]))
+#         label_np = np.vstack((label_np, x[:, idx+seq_length:idx+seq_length+label_length]))
+#     testdata_np = x[:, -seq_length:]
+#     return data_np, label_np, testdata_np
 
 
-def split(x, y, split_interval=10):                   # 沿时间顺序，每隔split_interval个样本取一个验证集样本
-    train_data = None
-    train_label = None
-    val_data = None
-    val_label = None
-    for i in tqdm(range(1, len(x))):
-        if i % split_interval == 0:
-            if val_data is None and val_label is None:
-                val_data = x[i]
-                val_label = y[i]
-            else:
-                val_data = np.vstack((val_data, x[i]))
-                val_label = np.vstack((val_label, y[i]))        
+# def split(x, y, split_interval=10):                   # 沿时间顺序，每隔split_interval个样本取一个验证集样本
+#     train_data = None
+#     train_label = None
+#     val_data = None
+#     val_label = None
+#     for i in tqdm(range(1, len(x))):
+#         if i % split_interval == 0:
+#             if val_data is None and val_label is None:
+#                 val_data = x[i]
+#                 val_label = y[i]
+#             else:
+#                 val_data = np.vstack((val_data, x[i]))
+#                 val_label = np.vstack((val_label, y[i]))        
+#         else:
+#             if train_data is None and train_label is None:
+#                 train_data = x[i]
+#                 train_label = y[i]
+#             else:
+#                 train_data = np.vstack((train_data, x[i]))
+#                 train_label = np.vstack((train_label, y[i]))
+#     permutation = np.random.permutation(train_data.shape[0])
+#     train_data = train_data[permutation]
+#     train_label = train_label[permutation]      
+#     return train_data, train_label, val_data, val_label
+
+
+def split(x, seq_length, label_length=56, ratio=0.7):
+    test_x = x[:, -seq_length:]
+    threshold_split = int(x[0].shape[-1] * ratio)         # 735 * 0.7 = 514
+    train_x = None
+    train_y = None
+    val_x = None
+    val_y = None
+    for idx in range(threshold_split):
+        if train_x is None:
+            train_x = x[:, idx:idx+seq_length]
+            train_y = x[:, idx+seq_length:idx+seq_length+label_length]
         else:
-            if train_data is None and train_label is None:
-                train_data = x[i]
-                train_label = y[i]
-            else:
-                train_data = np.vstack((train_data, x[i]))
-                train_label = np.vstack((train_label, y[i]))
-    return train_data, train_label, val_data, val_label
-            
-
+            train_x = np.vstack((train_x, x[:, idx:idx+seq_length]))
+            train_y = np.vstack((train_y, x[:, idx+seq_length:idx+seq_length+label_length]))
+    for idx in range(threshold_split, x[0].shape[-1] - seq_length - label_length):
+        if val_x is None:
+            val_x = x[:, idx:idx+seq_length]
+            val_y = x[:, idx+seq_length:idx+seq_length+label_length]
+        else:
+            val_x = np.vstack((val_x, x[:, idx:idx+seq_length]))
+            val_y = np.vstack((val_y, x[:, idx+seq_length:idx+seq_length+label_length]))
+    permutation = np.random.permutation(train_x.shape[0])
+    train_x = train_x[permutation]
+    train_y = train_y[permutation]
+    permutation = np.random.permutation(val_x.shape[0])
+    val_x = val_x[permutation]
+    val_y = val_y[permutation]
+    return train_x, train_y, val_x, val_y, test_x
+    
 
 class Trainer():
     def __init__(self, seq_length):
@@ -107,9 +143,10 @@ class Trainer():
             # 获取原始数据
             data = load_raw('train.csv')
             # 打标签，获取训练/验证集的数据和标签，以及测试集数据
-            data, label, test_data = get_label(data, self.seq_length)
+            # data, label, test_data = get_label(data, self.seq_length)
             print("Splitting Train/Val/Test data from scratch...")
-            train_data, train_label, val_data, val_label = split(data, label)
+            # train_data, train_label, val_data, val_label = split(data, label)
+            train_data, train_label, val_data, val_label, test_data = split(data, self.seq_length)
             if not os.path.exists(load_npy_path):
                 os.mkdir(load_npy_path)
             np.save(os.path.join(load_npy_path, 'train_x.npy'), train_data)
@@ -137,6 +174,7 @@ class Trainer():
             except AssertionError:
                 raise ValueError('npy shape is not consistent with self.seq_length.')        
         # 正则化
+        print(f"Trainset Shape: {train_data.shape}; Valset Shape: {val_data.shape}; Testset Shape: {test_data.shape}")         
         train_data, train_label, val_data, val_label, test_data, test_label, normer = normalization(train_data, train_label, val_data, val_label, test_data, test_label)
         self.normer = normer
         # 生成 Dataset & Dataloader
